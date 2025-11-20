@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formación DICO – Portal Formadores</title>
+
+<style>
+:root{
+  --violeta:#a78bfa;--violeta-osc:#7c3aed;--bg:#0b0c1a;--bg2:#161737;
+  --card:#17182b;--text:#e8e6ff;--muted:#bfbde6;--border-soft:rgba(167,139,250,.25);
+  --danger:#f87171;--success:#34d399;--yellow:#facc15;
+}
+*{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;}
+body{
+  margin:0;min-height:100vh;
+  background:linear-gradient(130deg,var(--bg),var(--bg2));
+  color:var(--text);display:flex;align-items:center;justify-content:center;padding:16px;
+}
+.hidden{display:none!important;}
+.card{
+  width:100%;max-width:1150px;background:rgba(23,24,43,.95);
+  border-radius:20px;border:1px solid var(--border-soft);
+  box-shadow:0 18px 45px rgba(0,0,0,.7);padding:22px 20px 20px;
+}
+h1{text-align:center;font-weight:800;font-size:22px;margin:0 0 4px;}
+.sub{text-align:center;color:var(--muted);font-size:13px;margin-bottom:16px;}
+input,select,textarea{
+  padding:9px 11px;border-radius:12px;background:#0e0f25;color:var(--text);
+  border:1px solid rgba(167,139,250,.35);
+}
+button{
+  border:0;border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;
+  background:linear-gradient(135deg,var(--violeta-osc),var(--violeta));color:white;transition:.12s ease;
+}
+button:hover{transform:translateY(-1px);filter:brightness(1.08);}
+button:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+button.sec{background:#211334;border:1px solid rgba(167,139,250,.4);box-shadow:none;}
+.table-wrap{
+  margin-top:6px;max-height:388px;overflow:auto;border-radius:12px;
+  border:1px solid rgba(167,139,250,.25);background:#050617;
+}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead{position:sticky;top:0;background:#101226;}
+tbody tr:nth-child(even){background:#101226;}
+tbody tr:hover{background:#181a3a;}
+.modal-backdrop{
+  position:fixed;left:0;top:0;width:100%;height:100%;
+  background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:99;
+}
+.modal{
+  background:#111329;padding:22px;border-radius:14px;width:90%;max-width:480px;
+  border:1px solid var(--border-soft);
+}
+</style>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div class="card" id="loginCard">
+  <h1>Formación DICO S.A.</h1>
+  <div class="sub">Portal de formadores – Registro y consulta de certificaciones</div>
+  <label>Correo</label>
+  <input id="email" type="email" style="width:100%;margin-top:4px;">
+  <label style="margin-top:8px;">Contraseña</label>
+  <input id="pass" type="password" style="width:100%;margin-top:4px;">
+  <button id="loginBtn" style="width:100%;margin-top:12px;">Ingresar</button>
+  <div id="loginStatus" style="text-align:center;margin-top:10px;color:var(--muted);font-size:13px;"></div>
+</div>
+
+<!-- ==================== PORTAL ==================== -->
+<div class="card hidden" id="portalCard">
+  <h1>Portal de formadores – Formación DICO S.A.</h1>
+  <div class="sub">Selecciona qué deseas hacer</div>
+
+  <div style="display:flex;justify-content:space-between;margin-bottom:10px;font-size:12px;">
+    <span style="color:var(--muted);" id="userBadge"></span>
+    <button class="sec" id="logoutBtn">Salir</button>
+  </div>
+
+  <div style="display:flex;gap:12px;justify-content:center;margin-bottom:14px;">
+    <button id="goRegistroBtn">📝 Registrar certificaciones</button>
+    <button class="sec" id="goPanelBtn">📊 Consultar mis estadísticas</button>
+  </div>
+
+  <!-- ============ REGISTRO ============ -->
+  <div id="registroCard" class="hidden">
+    <div class="sub" style="margin-bottom:6px;">Registro de certificaciones</div>
+
+    <label>Cédula del evaluado</label>
+    <input id="cedulaInput" placeholder="Ej: 1003245641" style="width:100%;margin-bottom:6px;">
+    <button id="buscarCedulaBtn">🔎 Buscar en base de personal</button>
+    <button class="sec" id="excelBtn" style="margin-left:8px;">📥 Pegar desde Excel</button>
+
+    <div class="table-wrap" style="margin-top:10px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Cédula</th><th>Nombre</th><th>Cargo</th>
+            <th>Teórica</th><th>Práctica</th><th>Calibración</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyReg"></tbody>
+      </table>
+    </div>
+
+    <button id="guardarLoteBtn" style="margin-top:12px;">💾 Guardar lote</button>
+    <div id="regStatus" style="margin-top:8px;color:var(--muted);font-size:12px;"></div>
+  </div>
+
+  <!-- ============ PANEL ESTADÍSTICAS ============ -->
+  <div id="panelFormadorCard" class="hidden">
+    <div class="sub">Mis estadísticas</div>
+
+    <!-- RESUMEN -->
+    <div id="statsResumen" style="margin:10px 0 12px 0; padding:8px 12px; border-radius:10px; background:rgba(167,139,250,.13); border:1px solid rgba(167,139,250,.45); font-size:13px; display:flex; gap:18px; flex-wrap:wrap;">
+      <span>📘 Promedio general: <b id="promGeneral" style="font-size:14px;font-weight:700;">--</b></span>
+      <span>🏅 % Indicador evaluación de eficacia: <b id="indicadorEficacia" style="font-size:14px;font-weight:700;">--</b></span>
+      <span>🧾 Total evaluaciones: <b id="totalEval">--</b></span>
+    </div>
+
+    <!-- FILTRO -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+      <div><label>Desde</label><input type="date" id="desde"></div>
+      <div><label>Hasta</label><input type="date" id="hasta"></div>
+      <button id="aplicarFiltroBtn">Aplicar</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Cédula</th><th>Nombre</th><th>Cargo</th>
+            <th>Teórica</th><th>Práctica</th><th>Calibración</th><th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyPanel"></tbody>
+      </table>
+    </div>
+
+    <div id="panelStatus" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL PEGAR EXCEL ===== -->
+<div class="modal-backdrop hidden" id="excelModal">
+  <div class="modal">
+    <h3 style="margin-top:0;">Pegar cédulas desde Excel</h3>
+    <p style="font-size:12px;color:var(--muted);">
+      Pega una columna de cédulas (una por línea). Se agregarán las que existan en la base de personal, hasta 25 filas.
+    </p>
+    <textarea id="excelTextarea" rows="7" style="width:100%;"></textarea>
+    <div style="text-align:right;margin-top:10px;">
+      <button class="sec" id="cancelExcelBtn">Cancelar</button>
+      <button id="addExcelBtn">Agregar a la tabla</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============== FIREBASE CONFIG ====================
+firebase.initializeApp({
+  apiKey:"AIzaSyACjJ8mdchnwSg9TdJWznUOVj14W6elhKo",
+  authDomain:"equipos-formacion.firebaseapp.com",
+  projectId:"equipos-formacion"
+});
+const db=firebase.firestore(), auth=firebase.auth();
+
+// ================= DOM =================
+const loginCard=document.getElementById("loginCard"),
+      portalCard=document.getElementById("portalCard"),
+      registroCard=document.getElementById("registroCard"),
+      panelFormadorCard=document.getElementById("panelFormadorCard"),
+      tbodyReg=document.getElementById("tbodyReg"),
+      tbodyPanel=document.getElementById("tbodyPanel"),
+      promGeneral=document.getElementById("promGeneral"),
+      indicadorEficacia=document.getElementById("indicadorEficacia"),
+      totalEval=document.getElementById("totalEval"),
+      panelStatus=document.getElementById("panelStatus");
+
+// ====== Mapa de cargos y pruebas que aplican ======
+const cargosEvaluacion={
+ "Tecnico Instalaciones UMM Aliado":["teorica","practica"],
+ "Supervisor UMM Aliado":["teorica","practica"],
+ "Auxiliar Operaciones Aliado":["teorica"],
+ "Auxiliar Conductor O&M Aliado":["teorica"],
+ "Auxiliar O&M Aliado":["teorica"],
+ "Tecnico Empalmador Aliado":["teorica"],
+ "Tecnico O&M Fijo Aliado":["teorica","practica","calibracion"],
+ "Tecnico Linero Aliado":["teorica"],
+ "Supervisor O&M Aliado":["teorica"],
+ "Tecnico Mantenimiento O&M Aliado":["teorica","practica","calibracion"],
+ "Tecnico Instalaciones UMC Aliado":["teorica","practica"],
+ "Tecnico Mapping Aliado":["teorica"]
+};
+
+// =============== LOGIN ====================
+document.getElementById("loginBtn").onclick=()=>{
+  auth.signInWithEmailAndPassword(email.value.trim(),pass.value.trim())
+    .catch(e=>loginStatus.textContent="❌ "+e.message);
+};
+auth.onAuthStateChanged(u=>{
+  if(!u){
+    loginCard.classList.remove("hidden");
+    portalCard.classList.add("hidden");
+  }else{
+    loginCard.classList.add("hidden");
+    portalCard.classList.remove("hidden");
+    userBadge.textContent=u.email;
+  }
+  reiniciarInactividad();
+});
+document.getElementById("logoutBtn").onclick=()=>auth.signOut();
+
+// =============== REGISTRO ====================
+let filasRegistro=[];
+
+async function addFila(cedula){
+  if(!cedula) return;
+  if(filasRegistro.length>=25) return alert("Máximo 25 registros por lote.");
+  if(filasRegistro.find(f=>f.cedula===cedula)) return;
+
+  // En tu colección personal los IDs son la cédula
+  const doc=await db.collection("personal").doc(String(cedula)).get();
+  if(!doc.exists) return alert(`Cédula ${cedula} no encontrada en personal.`);
+  const d=doc.data();
+  filasRegistro.push({cedula:d.cedula,nombre:d.nombre,cargo:d.cargo});
+  renderReg();
+}
+
+function renderReg(){
+  tbodyReg.innerHTML="";
+  filasRegistro.forEach((f,i)=>{
+    const tipos=cargosEvaluacion[f.cargo]||[];
+    tbodyReg.innerHTML+=`
+      <tr>
+        <td>${f.cedula}</td>
+        <td>${f.nombre}</td>
+        <td>${f.cargo}</td>
+        <td>${tipos.includes("teorica")?`<input data-i="${i}" data-t="teorica" class="nota" style="width:55px;">`:""}</td>
+        <td>${tipos.includes("practica")?`<input data-i="${i}" data-t="practica" class="nota" style="width:55px;">`:""}</td>
+        <td>${tipos.includes("calibracion")?`<input data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">`:""}</td>
+      </tr>`;
+  });
+
+  document.querySelectorAll(".nota").forEach(inp=>{
+    inp.oninput=()=>{
+      const n=parseFloat(inp.value);
+      if(isNaN(n)){inp.style.border="1px solid rgba(167,139,250,.35)";return;}
+      inp.style.border = n>=90 ? "2px solid var(--success)" : "2px solid var(--danger)";
+    };
+    inp.onchange=()=>{
+      const n=parseFloat(inp.value);
+      const idx=parseInt(inp.dataset.i,10);
+      const tipo=inp.dataset.t;
+      if(isNaN(n)) filasRegistro[idx][tipo]=undefined;
+      else filasRegistro[idx][tipo]=n;
+    };
+  });
+}
+
+document.getElementById("buscarCedulaBtn").onclick=()=>{
+  addFila(cedulaInput.value.trim());
+  cedulaInput.value="";
+};
+
+document.getElementById("guardarLoteBtn").onclick=async()=>{
+  if(!filasRegistro.length) return alert("No hay registros para guardar.");
+  const u=auth.currentUser;
+  if(!u) return alert("Sesión no válida.");
+
+  // Validar que todas las notas requeridas estén
+  for(const f of filasRegistro){
+    const req=cargosEvaluacion[f.cargo]||[];
+    for(const r of req){
+      if(typeof f[r] !== "number"){
+        return alert(`⚠ Falta la nota de ${r.toUpperCase()} para ${f.nombre} (${f.cedula}).`);
+      }
+    }
+  }
+
+  const fechaStr=new Date().toLocaleString("es-CO");
+  for(const f of filasRegistro){
+    const req=cargosEvaluacion[f.cargo]||[];
+    const notas=req.map(t=>f[t]);
+    const promedio = notas.reduce((a,b)=>a+b,0)/notas.length;
+
+    await db.collection("certificaciones").add({
+      cedula:f.cedula,
+      nombre:f.nombre,
+      cargo:f.cargo,
+      teorica: typeof f.teorica==="number"?f.teorica:null,
+      practica: typeof f.practica==="number"?f.practica:null,
+      calibracion: typeof f.calibracion==="number"?f.calibracion:null,
+      promedio: Number(promedio.toFixed(1)),
+      fechaRegistro: fechaStr,
+      formadorEmail: u.email
+    });
+  }
+
+  filasRegistro=[]; renderReg();
+  regStatus.textContent="✔ Lote guardado correctamente.";
+  setTimeout(()=>regStatus.textContent="",3000);
+};
+
+// =============== PEGAR DESDE EXCEL =================
+excelBtn.onclick=()=>excelModal.classList.remove("hidden");
+cancelExcelBtn.onclick=()=>excelModal.classList.add("hidden");
+addExcelBtn.onclick=()=>{
+  const lineas=excelTextarea.value.split(/\r?\n/).map(x=>x.trim()).filter(x=>x);
+  lineas.forEach(c=>addFila(c));
+  excelTextarea.value="";
+  excelModal.classList.add("hidden");
+};
+
+// =============== PANEL ESTADÍSTICAS =================
+function parseFecha(fecha){
+  if(!fecha) return null;
+  const solo = fecha.split(",")[0].trim(); // "19/11/2025"
+  const partes = solo.split("/");
+  if(partes.length!==3) return null;
+  const d = parseInt(partes[0],10);
+  const m = parseInt(partes[1],10);
+  const y = parseInt(partes[2],10);
+  if(isNaN(d)||isNaN(m)||isNaN(y)) return null;
+  return new Date(y,m-1,d);
+}
+
+async function cargarPanel(){
+  const u=auth.currentUser;
+  if(!u) return;
+  tbodyPanel.innerHTML="";
+  panelStatus.textContent="Cargando...";
+
+  const snap=await db.collection("certificaciones").where("formadorEmail","==",u.email).get();
+  const datos=snap.docs.map(d=>d.data());
+
+  aplicarFiltro(datos);
+}
+
+function aplicarFiltro(datos){
+  tbodyPanel.innerHTML="";
+
+  let d = desde.value ? new Date(desde.value+"T00:00:00") : null;
+  let h = hasta.value ? new Date(hasta.value+"T23:59:59") : null;
+
+  const filtrados = datos.filter(r=>{
+    const f = parseFecha(r.fechaRegistro);
+    if(!f) return false;
+    if(d && f < d) return false;
+    if(h && f > h) return false;
+    return true;
+  });
+
+  if(filtrados.length===0){
+    tbodyPanel.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--muted);">Sin registros.</td></tr>`;
+    panelStatus.textContent="Total registros: 0";
+    promGeneral.textContent="--";
+    indicadorEficacia.textContent="--";
+    indicadorEficacia.style.color="var(--yellow)";
+    totalEval.textContent="0";
+    return;
+  }
+
+  filtrados.forEach(r=>{
+    tbodyPanel.innerHTML+=`
+      <tr>
+        <td>${r.cedula||""}</td>
+        <td>${r.nombre||""}</td>
+        <td>${r.cargo||""}</td>
+        <td>${r.teorica ?? ""}</td>
+        <td>${r.practica ?? ""}</td>
+        <td>${r.calibracion ?? ""}</td>
+        <td>${r.fechaRegistro||""}</td>
+      </tr>`;
+  });
+
+  panelStatus.textContent="Total registros: "+filtrados.length;
+
+  // ==== Cálculo de promedios ====
+  let sumaPromPer=0, countPromPer=0;
+  let sumaNotas=0, countNotas=0;
+
+  filtrados.forEach(r=>{
+    // promedio por persona (campo "promedio" del documento)
+    if(r.promedio !== undefined && r.promedio !== null && r.promedio!==""){
+      const p = Number(r.promedio);
+      if(!isNaN(p)){ sumaPromPer+=p; countPromPer++; }
+    }
+
+    // todas las notas individuales para indicador de eficacia
+    ["teorica","practica","calibracion"].forEach(k=>{
+      if(r[k] !== undefined && r[k] !== null && r[k] !== ""){
+        const n = Number(r[k]);
+        if(!isNaN(n)){ sumaNotas+=n; countNotas++; }
+      }
+    });
+  });
+
+  // promedio general (promedio de promedios)
+  promGeneral.textContent = countPromPer
+    ? (sumaPromPer/countPromPer).toFixed(1)
+    : "--";
+
+  // indicador de eficacia (promedio de todas las notas)
+  if(countNotas){
+    const val = sumaNotas/countNotas;
+    indicadorEficacia.textContent = val.toFixed(1)+"%";
+
+    if(val>=85){
+      indicadorEficacia.style.color="#4ade80"; // verde
+    }else if(val>=70){
+      indicadorEficacia.style.color="#facc15"; // amarillo
+    }else{
+      indicadorEficacia.style.color="#f87171"; // rojo
+    }
+  }else{
+    indicadorEficacia.textContent="--";
+    indicadorEficacia.style.color="#facc15";
+  }
+
+  totalEval.textContent = filtrados.length;
+}
+
+aplicarFiltroBtn.onclick=()=>cargarPanel();
+
+// =============== NAVEGACIÓN =================
+goRegistroBtn.onclick=()=>{
+  registroCard.classList.remove("hidden");
+  panelFormadorCard.classList.add("hidden");
+};
+goPanelBtn.onclick=()=>{
+  panelFormadorCard.classList.remove("hidden");
+  registroCard.classList.add("hidden");
+  cargarPanel();
+};
+
+// =============== AUTOLOGOUT 10 MIN =================
+let tiempoInactividad;
+function reiniciarInactividad(){
+  clearTimeout(tiempoInactividad);
+  if(auth.currentUser){
+    tiempoInactividad=setTimeout(()=>{
+      alert("🔒 Sesión cerrada por inactividad (10 min).");
+      auth.signOut();
+    },10*60*1000);
+  }
+}
+["click","mousemove","keydown","scroll","touchstart"].forEach(ev=>{
+  document.addEventListener(ev,reiniciarInactividad,true);
+});
+</script>
+
+</body>
+</html>
