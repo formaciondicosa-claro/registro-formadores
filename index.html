@@ -380,9 +380,10 @@ function renderReg(){
     `).join("")}
   </select>
 </td>
-        <td>${tipos.includes("teorica")?`<input data-i="${i}" data-t="teorica" class="nota" style="width:55px;">`:""}</td>
-        <td>${tipos.includes("practica")?`<input data-i="${i}" data-t="practica" class="nota" style="width:55px;">`:""}</td>
-        <td>${tipos.includes("calibracion")?`<input data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">`:""}</td>
+        <td>${tipos.includes("teorica")?`<input value="${f.teorica ?? ""}" data-i="${i}" data-t="teorica" class="nota" style="width:55px;">`:""}</td>
+<td>${tipos.includes("practica")?`<input value="${f.practica ?? ""}" data-i="${i}" data-t="practica" class="nota" style="width:55px;">`:""}</td>
+<td>${tipos.includes("calibracion")?`<input value="${f.calibracion ?? ""}" data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">`:""}</td>
+
       </tr>`;
   });
 
@@ -416,6 +417,9 @@ document.querySelectorAll(".cargoSel").forEach(sel=>{
 
     // 2) Actualiza memoria
     filasRegistro[idx].cargo = nuevoCargo;
+    regStatus.textContent = "✅ Cargo actualizado en la base de personal.";
+setTimeout(()=>regStatus.textContent="",2000);
+
 
     // 3) Limpia notas que ya no aplican al nuevo cargo
     const req = cargosEvaluacion[nuevoCargo] || [];
