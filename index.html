@@ -54,9 +54,8 @@ tbody tr:hover{background:#181a3a;}
 }
 </style>
 
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
 
 </head>
 <body>
@@ -163,14 +162,56 @@ tbody tr:hover{background:#181a3a;}
 </div>
 
 <script>
-// =============== FIREBASE CONFIG ====================
-firebase.initializeApp({
-  apiKey:"AIzaSyACjJ8mdchnwSg9TdJWznUOVj14W6elhKo",
-  authDomain:"equipos-formacion.firebaseapp.com",
-  projectId:"equipos-formacion"
-});
-const db=firebase.firestore(), auth=firebase.auth();
 
+// ================= SUPABASE CONFIG =================
+const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
+
+// ⚠️ Reemplaza ESTA CLAVE por la anon public key real de tu proyecto
+const SUPABASE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  function todayISO(){
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDaysISO(isoDate, days){
+  const d = new Date(isoDate + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// ===== DOM que faltaba =====
+const loginStatus = document.getElementById("loginStatus");
+const userBadge = document.getElementById("userBadge");
+const logoutBtn = document.getElementById("logoutBtn");
+
+const email = document.getElementById("email");
+const pass = document.getElementById("pass");
+
+const cedulaInput = document.getElementById("cedulaInput");
+const regStatus = document.getElementById("regStatus");
+
+const excelBtn = document.getElementById("excelBtn");
+const excelModal = document.getElementById("excelModal");
+const excelTextarea = document.getElementById("excelTextarea");
+const cancelExcelBtn = document.getElementById("cancelExcelBtn");
+const addExcelBtn = document.getElementById("addExcelBtn");
+
+const desde = document.getElementById("desde");
+const hasta = document.getElementById("hasta");
+const aplicarFiltroBtn = document.getElementById("aplicarFiltroBtn");
+
+const goRegistroBtn = document.getElementById("goRegistroBtn");
+const goPanelBtn = document.getElementById("goPanelBtn");
+
+  
 // ================= DOM =================
 const loginCard=document.getElementById("loginCard"),
       portalCard=document.getElementById("portalCard"),
@@ -198,40 +239,131 @@ const cargosEvaluacion={
  "Tecnico Instalaciones UMC Aliado":["teorica","practica"],
  "Tecnico Mapping Aliado":["teorica"]
 };
+const MIN_APROBACION = 90;       // todos mínimo 90
+const VIGENCIA_DIAS = 365;       // 1 año
+function buildCertNameFromCargo(cargo){
+  const c = (cargo || "").trim();
+  return `Certificación – ${c || "Sin cargo"}`;
+}
+async function updateEmployeeCargo(employeeId, nuevoCargo){
+  const { error } = await sb.rpc("fn_update_employee_cargo", {
+    p_employee_id: employeeId,
+    p_cargo: nuevoCargo
+  });
+
+  if(error){
+    alert("❌ No se pudo actualizar el cargo: " + error.message);
+    return false;
+  }
+  return true;
+}
+
 
 // =============== LOGIN ====================
-document.getElementById("loginBtn").onclick=()=>{
-  auth.signInWithEmailAndPassword(email.value.trim(),pass.value.trim())
-    .catch(e=>loginStatus.textContent="❌ "+e.message);
+document.getElementById("loginBtn").onclick = async () => {
+
+  const emailVal = document.getElementById("email").value.trim();
+  const passVal  = document.getElementById("pass").value.trim();
+
+  if(!emailVal || !passVal){
+    loginStatus.textContent = "❌ Digita correo y contraseña.";
+    return;
+  }
+
+  loginStatus.textContent = "Ingresando...";
+
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: emailVal,
+    password: passVal
+  });
+
+  if(error){
+    loginStatus.textContent = "❌ " + error.message;
+    return;
+  }
+
+  // Login OK
+  loginStatus.textContent = "✅ Bienvenido";
+
+  loginCard.classList.add("hidden");
+  portalCard.classList.remove("hidden");
+
+  userBadge.textContent = data.user.email;
+
+  reiniciarInactividad();
 };
-auth.onAuthStateChanged(u=>{
-  if(!u){
+
+sb.auth.onAuthStateChange((event, session) => {
+
+  if(!session || !session.user){
     loginCard.classList.remove("hidden");
     portalCard.classList.add("hidden");
-  }else{
-    loginCard.classList.add("hidden");
-    portalCard.classList.remove("hidden");
-    userBadge.textContent=u.email;
+    return;
   }
+
+  // Sesión activa
+  loginCard.classList.add("hidden");
+  portalCard.classList.remove("hidden");
+
+  userBadge.textContent = session.user.email;
+
   reiniciarInactividad();
 });
-document.getElementById("logoutBtn").onclick=()=>auth.signOut();
+
+logoutBtn.onclick = async () => {
+  await sb.auth.signOut();
+};
+
 
 // =============== REGISTRO ====================
 let filasRegistro=[];
 
 async function addFila(cedula){
-  if(!cedula) return;
-  if(filasRegistro.length>=25) return alert("Máximo 25 registros por lote.");
-  if(filasRegistro.find(f=>f.cedula===cedula)) return;
 
-  // En tu colección personal los IDs son la cédula
-  const doc=await db.collection("personal").doc(String(cedula)).get();
-  if(!doc.exists) return alert(`Cédula ${cedula} no encontrada en personal.`);
-  const d=doc.data();
-  filasRegistro.push({cedula:d.cedula,nombre:d.nombre,cargo:d.cargo});
+  // 1) Normalizar
+  cedula = String(cedula || "").trim();
+  if(!cedula) return;
+
+  // 2) Validaciones básicas
+  if(filasRegistro.length >= 25){
+    alert("Máximo 25 registros por lote.");
+    return;
+  }
+
+  // Evitar repetir en el lote
+  if(filasRegistro.some(f => String(f.cedula) === cedula)){
+    return;
+  }
+
+  // 3) Buscar en Supabase (tabla employees)
+  const { data: emp, error } = await sb
+    .from("employees")
+    .select("id, documento, nombre, cargo")
+    .eq("documento", cedula)
+    .maybeSingle();
+
+  if(error){
+    alert("❌ Error consultando empleados: " + error.message);
+    return;
+  }
+
+  if(!emp){
+    alert(`❌ Cédula ${cedula} no encontrada en la base de personal.`);
+    return;
+  }
+
+  // 4) Guardar en memoria para pintar la tabla
+  //    OJO: dejamos cedula como documento y guardamos employee_id para el guardado final
+  filasRegistro.push({
+    employee_id: emp.id,
+    cedula: emp.documento,
+    nombre: emp.nombre,
+    cargo: emp.cargo
+  });
+
   renderReg();
 }
+
 
 function renderReg(){
   tbodyReg.innerHTML="";
@@ -241,7 +373,13 @@ function renderReg(){
       <tr>
         <td>${f.cedula}</td>
         <td>${f.nombre}</td>
-        <td>${f.cargo}</td>
+        <td>
+  <select class="cargoSel" data-i="${i}" style="min-width:220px;">
+    ${Object.keys(cargosEvaluacion).map(cg => `
+      <option value="${cg}" ${cg===f.cargo ? "selected":""}>${cg}</option>
+    `).join("")}
+  </select>
+</td>
         <td>${tipos.includes("teorica")?`<input data-i="${i}" data-t="teorica" class="nota" style="width:55px;">`:""}</td>
         <td>${tipos.includes("practica")?`<input data-i="${i}" data-t="practica" class="nota" style="width:55px;">`:""}</td>
         <td>${tipos.includes("calibracion")?`<input data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">`:""}</td>
@@ -252,7 +390,7 @@ function renderReg(){
     inp.oninput=()=>{
       const n=parseFloat(inp.value);
       if(isNaN(n)){inp.style.border="1px solid rgba(167,139,250,.35)";return;}
-      inp.style.border = n>=90 ? "2px solid var(--success)" : "2px solid var(--danger)";
+     inp.style.border = n>=MIN_APROBACION ? "2px solid var(--success)" : "2px solid var(--danger)";
     };
     inp.onchange=()=>{
       const n=parseFloat(inp.value);
@@ -262,6 +400,34 @@ function renderReg(){
       else filasRegistro[idx][tipo]=n;
     };
   });
+  // ====== Cambiar cargo (y guardar en employees) ======
+document.querySelectorAll(".cargoSel").forEach(sel=>{
+  sel.onchange = async () => {
+    const idx = parseInt(sel.dataset.i, 10);
+    const nuevoCargo = sel.value;
+
+    // 1) Guardar en DB (employees)
+    const ok = await updateEmployeeCargo(filasRegistro[idx].employee_id, nuevoCargo);
+    if(!ok){
+      // si falla, repinta y vuelve al cargo anterior
+      renderReg();
+      return;
+    }
+
+    // 2) Actualiza memoria
+    filasRegistro[idx].cargo = nuevoCargo;
+
+    // 3) Limpia notas que ya no aplican al nuevo cargo
+    const req = cargosEvaluacion[nuevoCargo] || [];
+    if(!req.includes("teorica")) filasRegistro[idx].teorica = undefined;
+    if(!req.includes("practica")) filasRegistro[idx].practica = undefined;
+    if(!req.includes("calibracion")) filasRegistro[idx].calibracion = undefined;
+
+    // 4) Repinta tabla
+    renderReg();
+  };
+});
+
 }
 
 document.getElementById("buscarCedulaBtn").onclick=()=>{
@@ -271,8 +437,10 @@ document.getElementById("buscarCedulaBtn").onclick=()=>{
 
 document.getElementById("guardarLoteBtn").onclick=async()=>{
   if(!filasRegistro.length) return alert("No hay registros para guardar.");
-  const u=auth.currentUser;
-  if(!u) return alert("Sesión no válida.");
+  const { data: ses } = await sb.auth.getSession();
+const u = ses?.session?.user;
+if(!u) return alert("Sesión no válida. Inicia sesión de nuevo.");
+
 
   // Validar que todas las notas requeridas estén
   for(const f of filasRegistro){
@@ -283,25 +451,61 @@ document.getElementById("guardarLoteBtn").onclick=async()=>{
       }
     }
   }
-
-  const fechaStr=new Date().toLocaleString("es-CO");
-  for(const f of filasRegistro){
-    const req=cargosEvaluacion[f.cargo]||[];
-    const notas=req.map(t=>f[t]);
-    const promedio = notas.reduce((a,b)=>a+b,0)/notas.length;
-
-    await db.collection("certificaciones").add({
-      cedula:f.cedula,
-      nombre:f.nombre,
-      cargo:f.cargo,
-      teorica: typeof f.teorica==="number"?f.teorica:null,
-      practica: typeof f.practica==="number"?f.practica:null,
-      calibracion: typeof f.calibracion==="number"?f.calibracion:null,
-      promedio: Number(promedio.toFixed(1)),
-      fechaRegistro: fechaStr,
-      formadorEmail: u.email
-    });
+// Validar aprobación: todas las requeridas deben ser >= 90
+for(const f of filasRegistro){
+  const req = cargosEvaluacion[f.cargo] || [];
+  for(const r of req){
+    const n = Number(f[r]);
+    if(isNaN(n) || n < MIN_APROBACION){
+      return alert(`❌ NO aprueba: ${f.nombre} (${f.cedula}) tiene ${r.toUpperCase()} = ${f[r]} (mínimo ${MIN_APROBACION}).`);
+    }
   }
+}
+
+  const hoy = todayISO();
+const vence = addDaysISO(hoy, VIGENCIA_DIAS);
+
+const payload = [];
+
+for(const f of filasRegistro){
+  const req = cargosEvaluacion[f.cargo] || [];
+  const notas = req.map(k => Number(f[k]));
+  const promedio = notas.reduce((a,b)=>a+b,0) / (notas.length || 1);
+
+  payload.push({
+    employee_id: f.employee_id,                          // uuid del empleado
+    certificacion: buildCertNameFromCargo(f.cargo),       // "Certificación – {cargo}"
+    // Fechas (hoy) solo para las que aplican a su cargo
+    fecha_teorica: req.includes("teorica") ? hoy : null,
+    fecha_practica: req.includes("practica") ? hoy : null,
+    fecha_calibracion: req.includes("calibracion") ? hoy : null,
+
+    // NOTAS
+    nota_teorica: req.includes("teorica") ? Number(f.teorica) : null,
+    nota_practica: req.includes("practica") ? Number(f.practica) : null,
+    nota_calibracion: req.includes("calibracion") ? Number(f.calibracion) : null,
+    nota_promedio: Number(promedio.toFixed(1)),
+
+    // VIGENCIA
+    vigencia_desde: hoy,
+    vigencia_hasta: vence,
+
+    // auditoría
+    formador_email: u.email,
+    updated_at: new Date().toISOString()
+  });
+}
+
+// 🔥 Guardar en Supabase (upsert)
+const { error: upErr } = await sb
+  .from("employee_certifications")
+  .upsert(payload, { onConflict: "employee_id,certificacion" });
+
+if(upErr){
+  alert("❌ Error guardando certificaciones: " + upErr.message);
+  return;
+}
+
 
   filasRegistro=[]; renderReg();
   regStatus.textContent="✔ Lote guardado correctamente.";
@@ -332,102 +536,125 @@ function parseFecha(fecha){
 }
 
 async function cargarPanel(){
-  const u=auth.currentUser;
+
+  const { data: ses } = await sb.auth.getSession();
+  const u = ses?.session?.user;
+
   if(!u) return;
-  tbodyPanel.innerHTML="";
-  panelStatus.textContent="Cargando...";
 
-  const snap=await db.collection("certificaciones").where("formadorEmail","==",u.email).get();
-  const datos=snap.docs.map(d=>d.data());
+  tbodyPanel.innerHTML = "";
+  panelStatus.textContent = "Cargando...";
 
-  aplicarFiltro(datos);
+  // Traer certificaciones del formador
+  const { data, error } = await sb
+    .from("employee_certifications")
+    .select(`
+      employee_id,
+      certificacion,
+      nota_teorica,
+      nota_practica,
+      nota_calibracion,
+      nota_promedio,
+      vigencia_desde,
+      updated_at,
+      employees (
+        documento,
+        nombre,
+        cargo
+      )
+    `)
+    .eq("formador_email", u.email)
+    .order("updated_at", { ascending: false });
+
+  if(error){
+    panelStatus.textContent = "❌ Error cargando datos.";
+    alert(error.message);
+    return;
+  }
+
+  aplicarFiltro(data || []);
 }
 
+
 function aplicarFiltro(datos){
-  tbodyPanel.innerHTML="";
+
+  tbodyPanel.innerHTML = "";
 
   let d = desde.value ? new Date(desde.value+"T00:00:00") : null;
   let h = hasta.value ? new Date(hasta.value+"T23:59:59") : null;
 
-  const filtrados = datos.filter(r=>{
-    const f = parseFecha(r.fechaRegistro);
-    if(!f) return false;
+  const filtrados = (datos || []).filter(r=>{
+
+    if(!r.updated_at) return false;
+
+    const f = new Date(r.updated_at);
+
     if(d && f < d) return false;
     if(h && f > h) return false;
+
     return true;
   });
 
-  if(filtrados.length===0){
-    tbodyPanel.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--muted);">Sin registros.</td></tr>`;
-    panelStatus.textContent="Total registros: 0";
-    promGeneral.textContent="--";
-    indicadorEficacia.textContent="--";
-    indicadorEficacia.style.color="var(--yellow)";
-    totalEval.textContent="0";
+  if(!filtrados.length){
+
+    tbodyPanel.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align:center;color:var(--muted);">
+          Sin registros.
+        </td>
+      </tr>
+    `;
+
+    panelStatus.textContent = "Total registros: 0";
+
+    promGeneral.textContent = "--";
+    indicadorEficacia.textContent = "--";
+    totalEval.textContent = "0";
+
     return;
   }
 
+  let sumaProm = 0;
+
   filtrados.forEach(r=>{
-    tbodyPanel.innerHTML+=`
+
+    const emp = r.employees || {};
+
+    tbodyPanel.innerHTML += `
       <tr>
-        <td>${r.cedula||""}</td>
-        <td>${r.nombre||""}</td>
-        <td>${r.cargo||""}</td>
-        <td>${r.teorica ?? ""}</td>
-        <td>${r.practica ?? ""}</td>
-        <td>${r.calibracion ?? ""}</td>
-        <td>${r.fechaRegistro||""}</td>
-      </tr>`;
+        <td>${emp.documento || ""}</td>
+        <td>${emp.nombre || ""}</td>
+        <td>${emp.cargo || ""}</td>
+        <td>${r.nota_teorica ?? ""}</td>
+        <td>${r.nota_practica ?? ""}</td>
+        <td>${r.nota_calibracion ?? ""}</td>
+        <td>${(r.updated_at || "").slice(0,10)}</td>
+      </tr>
+    `;
+
+    if(r.nota_promedio){
+      sumaProm += Number(r.nota_promedio);
+    }
   });
 
-  panelStatus.textContent="Total registros: "+filtrados.length;
+  const prom = sumaProm / filtrados.length;
 
-  // ==== Cálculo de promedios ====
-  let sumaPromPer=0, countPromPer=0;
-  let sumaNotas=0, countNotas=0;
+  promGeneral.textContent = prom.toFixed(1);
+  indicadorEficacia.textContent = prom.toFixed(1) + "%";
+  totalEval.textContent = filtrados.length;
 
-  filtrados.forEach(r=>{
-    // promedio por persona (campo "promedio" del documento)
-    if(r.promedio !== undefined && r.promedio !== null && r.promedio!==""){
-      const p = Number(r.promedio);
-      if(!isNaN(p)){ sumaPromPer+=p; countPromPer++; }
-    }
-
-    // todas las notas individuales para indicador de eficacia
-    ["teorica","practica","calibracion"].forEach(k=>{
-      if(r[k] !== undefined && r[k] !== null && r[k] !== ""){
-        const n = Number(r[k]);
-        if(!isNaN(n)){ sumaNotas+=n; countNotas++; }
-      }
-    });
-  });
-
-  // promedio general (promedio de promedios)
-  promGeneral.textContent = countPromPer
-    ? (sumaPromPer/countPromPer).toFixed(1)
-    : "--";
-
-  // indicador de eficacia (promedio de todas las notas)
-  if(countNotas){
-    const val = sumaNotas/countNotas;
-    indicadorEficacia.textContent = val.toFixed(1)+"%";
-
-    if(val>=85){
-      indicadorEficacia.style.color="#4ade80"; // verde
-    }else if(val>=70){
-      indicadorEficacia.style.color="#facc15"; // amarillo
-    }else{
-      indicadorEficacia.style.color="#f87171"; // rojo
-    }
+  if(prom >= 85){
+    indicadorEficacia.style.color = "#4ade80";
+  }else if(prom >= 70){
+    indicadorEficacia.style.color = "#facc15";
   }else{
-    indicadorEficacia.textContent="--";
-    indicadorEficacia.style.color="#facc15";
+    indicadorEficacia.style.color = "#f87171";
   }
 
-  totalEval.textContent = filtrados.length;
+  panelStatus.textContent = "Total registros: " + filtrados.length;
 }
-
-aplicarFiltroBtn.onclick=()=>cargarPanel();
+    
+  aplicarFiltroBtn.onclick=()=>cargarPanel();
 
 // =============== NAVEGACIÓN =================
 goRegistroBtn.onclick=()=>{
@@ -442,18 +669,23 @@ goPanelBtn.onclick=()=>{
 
 // =============== AUTOLOGOUT 10 MIN =================
 let tiempoInactividad;
-function reiniciarInactividad(){
+
+async function reiniciarInactividad(){
   clearTimeout(tiempoInactividad);
-  if(auth.currentUser){
-    tiempoInactividad=setTimeout(()=>{
+
+  const { data } = await sb.auth.getSession();
+  if(data && data.session){
+    tiempoInactividad = setTimeout(async () => {
       alert("🔒 Sesión cerrada por inactividad (10 min).");
-      auth.signOut();
-    },10*60*1000);
+      await sb.auth.signOut();
+    }, 10 * 60 * 1000);
   }
 }
+
 ["click","mousemove","keydown","scroll","touchstart"].forEach(ev=>{
-  document.addEventListener(ev,reiniciarInactividad,true);
+  document.addEventListener(ev, () => { reiniciarInactividad(); }, true);
 });
+
 </script>
 
 </body>
