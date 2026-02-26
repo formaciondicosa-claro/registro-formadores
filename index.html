@@ -99,11 +99,12 @@ tbody tr:hover{background:#181a3a;}
     <div class="table-wrap" style="margin-top:10px;">
       <table>
         <thead>
-          <tr>
-            <th>Cédula</th><th>Nombre</th><th>Cargo</th>
-            <th>Teórica</th><th>Práctica</th><th>Calibración</th>
-          </tr>
-        </thead>
+  <tr>
+    <th>Cédula</th><th>Nombre</th><th>Cargo</th>
+    <th>Teórica</th><th>Práctica</th><th>Calibración</th>
+    <th>CLARO</th>
+  </tr>
+</thead>
         <tbody id="tbodyReg"></tbody>
       </table>
     </div>
@@ -160,14 +161,29 @@ tbody tr:hover{background:#181a3a;}
     </div>
   </div>
 </div>
+<!-- ===== MODAL FECHA CLARO (YA CERTIFICADO) ===== -->
+<div class="modal-backdrop hidden" id="claroFechaModal">
+  <div class="modal">
+    <h3 style="margin-top:0;">CLARO – Ya certificado</h3>
+    <p style="font-size:12px;color:var(--muted);">
+      Selecciona la fecha de certificación (inicio). El vencimiento será automático + 365 días.
+    </p>
+    <label>Fecha certificación</label>
+    <input type="date" id="claroFechaInput" style="width:100%;">
 
+    <div style="text-align:right;margin-top:10px;">
+      <button class="sec" id="cancelClaroFechaBtn">Cancelar</button>
+      <button id="okClaroFechaBtn">Guardar</button>
+    </div>
+  </div>
+</div>
 <script>
 
 // ================= SUPABASE CONFIG =================
-const SUPABASE_URL = "https://bqlltjronzrlgbjjntes.supabase.co";
+const SUPABASE_URL = "https://zltjlwfnqrjojguewaiq.supabase.co";
 
 // ⚠️ Reemplaza ESTA CLAVE por la anon public key real de tu proyecto
-const SUPABASE_KEY = "sb_publishable_j84bjNzsEw1O-zsvliQ4Wg_BhGkSqR_";
+const SUPABASE_KEY = "sb_publishable_Q_-wmXnWL1V5A8gjSgjZTQ_UumLas2f";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   function todayISO(){
@@ -203,7 +219,39 @@ const excelModal = document.getElementById("excelModal");
 const excelTextarea = document.getElementById("excelTextarea");
 const cancelExcelBtn = document.getElementById("cancelExcelBtn");
 const addExcelBtn = document.getElementById("addExcelBtn");
+// ===== MODAL CLARO FECHA =====
+const claroFechaModal = document.getElementById("claroFechaModal");
+const claroFechaInput = document.getElementById("claroFechaInput");
+const cancelClaroFechaBtn = document.getElementById("cancelClaroFechaBtn");
+const okClaroFechaBtn = document.getElementById("okClaroFechaBtn");
 
+let claroEmployeeIdPendiente = null;
+
+cancelClaroFechaBtn.onclick = () => {
+  claroEmployeeIdPendiente = null;
+  claroFechaModal.classList.add("hidden");
+};
+
+okClaroFechaBtn.onclick = async () => {
+  const fecha = claroFechaInput.value;
+  if(!claroEmployeeIdPendiente) return;
+  if(!fecha) return alert("Selecciona la fecha.");
+
+  const { error } = await sb.rpc("fn_claro_set_precertificado", {
+    p_employee_id: claroEmployeeIdPendiente,
+    p_fecha_inicio: fecha
+  });
+
+  if(error){
+    alert("❌ No se pudo marcar YA CERTIFICADO: " + error.message);
+    return;
+  }
+
+  claroEmployeeIdPendiente = null;
+  claroFechaModal.classList.add("hidden");
+  regStatus.textContent = "✅ CLARO actualizado: YA CERTIFICADO.";
+  setTimeout(()=>regStatus.textContent="",2500);
+};
 const desde = document.getElementById("desde");
 const hasta = document.getElementById("hasta");
 const aplicarFiltroBtn = document.getElementById("aplicarFiltroBtn");
@@ -366,72 +414,107 @@ async function addFila(cedula){
 
 
 function renderReg(){
-  tbodyReg.innerHTML="";
+  tbodyReg.innerHTML = "";
+
   filasRegistro.forEach((f,i)=>{
-    const tipos=cargosEvaluacion[f.cargo]||[];
-    tbodyReg.innerHTML+=`
+    const tipos = cargosEvaluacion[f.cargo] || [];
+
+    tbodyReg.innerHTML += `
       <tr>
         <td>${f.cedula}</td>
         <td>${f.nombre}</td>
         <td>
-  <select class="cargoSel" data-i="${i}" style="min-width:220px;">
-    ${Object.keys(cargosEvaluacion).map(cg => `
-      <option value="${cg}" ${cg===f.cargo ? "selected":""}>${cg}</option>
-    `).join("")}
-  </select>
-</td>
-        <td>${tipos.includes("teorica")?`<input value="${f.teorica ?? ""}" data-i="${i}" data-t="teorica" class="nota" style="width:55px;">`:""}</td>
-<td>${tipos.includes("practica")?`<input value="${f.practica ?? ""}" data-i="${i}" data-t="practica" class="nota" style="width:55px;">`:""}</td>
-<td>${tipos.includes("calibracion")?`<input value="${f.calibracion ?? ""}" data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">`:""}</td>
+          <select class="cargoSel" data-i="${i}" style="min-width:220px;">
+            ${Object.keys(cargosEvaluacion).map(cg => `
+              <option value="${cg}" ${cg===f.cargo ? "selected":""}>${cg}</option>
+            `).join("")}
+          </select>
+        </td>
+        <td>${tipos.includes("teorica") ? `<input value="${f.teorica ?? ""}" data-i="${i}" data-t="teorica" class="nota" style="width:55px;">` : ""}</td>
+        <td>${tipos.includes("practica") ? `<input value="${f.practica ?? ""}" data-i="${i}" data-t="practica" class="nota" style="width:55px;">` : ""}</td>
+        <td>${tipos.includes("calibracion") ? `<input value="${f.calibracion ?? ""}" data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">` : ""}</td>
 
-      </tr>`;
+        <td style="white-space:nowrap;">
+          <button class="sec btnBloq" data-eid="${f.employee_id}" style="padding:6px 10px;font-size:12px;">🔒 Bloqueado</button>
+          <button class="btnYaCert" data-eid="${f.employee_id}" style="padding:6px 10px;font-size:12px;margin-left:6px;">✅ Ya certificado</button>
+        </td>
+      </tr>
+    `;
   });
 
+  // ===== Notas =====
   document.querySelectorAll(".nota").forEach(inp=>{
-    inp.oninput=()=>{
-      const n=parseFloat(inp.value);
-      if(isNaN(n)){inp.style.border="1px solid rgba(167,139,250,.35)";return;}
-     inp.style.border = n>=MIN_APROBACION ? "2px solid var(--success)" : "2px solid var(--danger)";
+    inp.oninput = ()=>{
+      const n = parseFloat(inp.value);
+      if(isNaN(n)){
+        inp.style.border="1px solid rgba(167,139,250,.35)";
+        return;
+      }
+      inp.style.border = n>=MIN_APROBACION ? "2px solid var(--success)" : "2px solid var(--danger)";
     };
-    inp.onchange=()=>{
-      const n=parseFloat(inp.value);
-      const idx=parseInt(inp.dataset.i,10);
-      const tipo=inp.dataset.t;
-      if(isNaN(n)) filasRegistro[idx][tipo]=undefined;
-      else filasRegistro[idx][tipo]=n;
+    inp.onchange = ()=>{
+      const n = parseFloat(inp.value);
+      const idx = parseInt(inp.dataset.i,10);
+      const tipo = inp.dataset.t;
+      if(isNaN(n)) filasRegistro[idx][tipo] = undefined;
+      else filasRegistro[idx][tipo] = n;
     };
   });
-  // ====== Cambiar cargo (y guardar en employees) ======
-document.querySelectorAll(".cargoSel").forEach(sel=>{
-  sel.onchange = async () => {
-    const idx = parseInt(sel.dataset.i, 10);
-    const nuevoCargo = sel.value;
 
-    // 1) Guardar en DB (employees)
-    const ok = await updateEmployeeCargo(filasRegistro[idx].employee_id, nuevoCargo);
-    if(!ok){
-      // si falla, repinta y vuelve al cargo anterior
+  // ===== Cambiar cargo =====
+  document.querySelectorAll(".cargoSel").forEach(sel=>{
+    sel.onchange = async () => {
+      const idx = parseInt(sel.dataset.i, 10);
+      const nuevoCargo = sel.value;
+
+      const ok = await updateEmployeeCargo(filasRegistro[idx].employee_id, nuevoCargo);
+      if(!ok){
+        renderReg();
+        return;
+      }
+
+      filasRegistro[idx].cargo = nuevoCargo;
+      regStatus.textContent = "✅ Cargo actualizado en la base de personal.";
+      setTimeout(()=>regStatus.textContent="",2000);
+
+      const req = cargosEvaluacion[nuevoCargo] || [];
+      if(!req.includes("teorica")) filasRegistro[idx].teorica = undefined;
+      if(!req.includes("practica")) filasRegistro[idx].practica = undefined;
+      if(!req.includes("calibracion")) filasRegistro[idx].calibracion = undefined;
+
       renderReg();
-      return;
-    }
+    };
+  });
 
-    // 2) Actualiza memoria
-    filasRegistro[idx].cargo = nuevoCargo;
-    regStatus.textContent = "✅ Cargo actualizado en la base de personal.";
-setTimeout(()=>regStatus.textContent="",2000);
+  // ===== Botón BLOQUEADO =====
+  document.querySelectorAll(".btnBloq").forEach(b=>{
+    b.onclick = async () => {
+      const eid = b.dataset.eid;
+      if(!confirm("¿Marcar como BLOQUEADO en CLARO?")) return;
 
+      const { error } = await sb.rpc("fn_claro_bloquear", {
+        p_employee_id: eid,
+        p_motivo: "Bloqueado por formador"
+      });
 
-    // 3) Limpia notas que ya no aplican al nuevo cargo
-    const req = cargosEvaluacion[nuevoCargo] || [];
-    if(!req.includes("teorica")) filasRegistro[idx].teorica = undefined;
-    if(!req.includes("practica")) filasRegistro[idx].practica = undefined;
-    if(!req.includes("calibracion")) filasRegistro[idx].calibracion = undefined;
+      if(error){
+        alert("❌ No se pudo bloquear: " + error.message);
+        return;
+      }
 
-    // 4) Repinta tabla
-    renderReg();
-  };
-});
+      regStatus.textContent = "✅ Marcado BLOQUEADO en CLARO.";
+      setTimeout(()=>regStatus.textContent="",2500);
+    };
+  });
 
+  // ===== Botón YA CERTIFICADO =====
+  document.querySelectorAll(".btnYaCert").forEach(b=>{
+    b.onclick = () => {
+      claroEmployeeIdPendiente = b.dataset.eid;
+      claroFechaInput.value = todayISO();
+      claroFechaModal.classList.remove("hidden");
+    };
+  });
 }
 
 document.getElementById("buscarCedulaBtn").onclick=()=>{
@@ -500,13 +583,23 @@ for(const f of filasRegistro){
   });
 }
 
-// 🔥 Guardar en Supabase (upsert)
+// 1) Guardar HISTÓRICO (siempre inserta)
+const { error: histErr } = await sb
+  .from("employee_certifications_history")
+  .insert(payload);
+
+if(histErr){
+  alert("❌ Error guardando HISTÓRICO: " + histErr.message);
+  return;
+}
+
+// 2) Guardar ACTUAL (upsert)
 const { error: upErr } = await sb
   .from("employee_certifications")
   .upsert(payload, { onConflict: "employee_id,certificacion" });
 
 if(upErr){
-  alert("❌ Error guardando certificaciones: " + upErr.message);
+  alert("❌ Error guardando certificaciones (ACTUAL): " + upErr.message);
   return;
 }
 
