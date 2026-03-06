@@ -98,11 +98,12 @@ tbody tr:hover{background:#181a3a;}
 
     <div class="table-wrap" style="margin-top:10px;">
       <table>
-        <thead>
+       <thead>
   <tr>
     <th>Cédula</th><th>Nombre</th><th>Cargo</th>
     <th>Teórica</th><th>Práctica</th><th>Calibración</th>
     <th>CLARO</th>
+    <th>Quitar</th>
   </tr>
 </thead>
         <tbody id="tbodyReg"></tbody>
@@ -365,7 +366,15 @@ logoutBtn.onclick = async () => {
 
 // =============== REGISTRO ====================
 let filasRegistro=[];
+function removeFila(idx){
+  if(idx < 0 || idx >= filasRegistro.length) return;
+  const f = filasRegistro[idx];
+  const ok = confirm(`¿Eliminar del lote a:\n${f.nombre} (${f.cedula})?`);
+  if(!ok) return;
 
+  filasRegistro.splice(idx, 1);
+  renderReg();
+}
 async function addFila(cedula){
 
   // 1) Normalizar
@@ -420,26 +429,32 @@ function renderReg(){
     const tipos = cargosEvaluacion[f.cargo] || [];
 
     tbodyReg.innerHTML += `
-      <tr>
-        <td>${f.cedula}</td>
-        <td>${f.nombre}</td>
-        <td>
-          <select class="cargoSel" data-i="${i}" style="min-width:220px;">
-            ${Object.keys(cargosEvaluacion).map(cg => `
-              <option value="${cg}" ${cg===f.cargo ? "selected":""}>${cg}</option>
-            `).join("")}
-          </select>
-        </td>
-        <td>${tipos.includes("teorica") ? `<input value="${f.teorica ?? ""}" data-i="${i}" data-t="teorica" class="nota" style="width:55px;">` : ""}</td>
-        <td>${tipos.includes("practica") ? `<input value="${f.practica ?? ""}" data-i="${i}" data-t="practica" class="nota" style="width:55px;">` : ""}</td>
-        <td>${tipos.includes("calibracion") ? `<input value="${f.calibracion ?? ""}" data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">` : ""}</td>
+  <tr>
+    <td>${f.cedula}</td>
+    <td>${f.nombre}</td>
+    <td>
+      <select class="cargoSel" data-i="${i}" style="min-width:220px;">
+        ${Object.keys(cargosEvaluacion).map(cg => `
+          <option value="${cg}" ${cg===f.cargo ? "selected":""}>${cg}</option>
+        `).join("")}
+      </select>
+    </td>
+    <td>${tipos.includes("teorica") ? `<input value="${f.teorica ?? ""}" data-i="${i}" data-t="teorica" class="nota" style="width:55px;">` : ""}</td>
+    <td>${tipos.includes("practica") ? `<input value="${f.practica ?? ""}" data-i="${i}" data-t="practica" class="nota" style="width:55px;">` : ""}</td>
+    <td>${tipos.includes("calibracion") ? `<input value="${f.calibracion ?? ""}" data-i="${i}" data-t="calibracion" class="nota" style="width:55px;">` : ""}</td>
 
-        <td style="white-space:nowrap;">
-          <button class="sec btnBloq" data-eid="${f.employee_id}" style="padding:6px 10px;font-size:12px;">🔒 Bloqueado</button>
-          <button class="btnYaCert" data-eid="${f.employee_id}" style="padding:6px 10px;font-size:12px;margin-left:6px;">✅ Ya certificado</button>
-        </td>
-      </tr>
-    `;
+    <td style="white-space:nowrap;">
+      <button class="sec btnBloq" data-eid="${f.employee_id}" style="padding:6px 10px;font-size:12px;">🔒 Bloqueado</button>
+      <button class="btnYaCert" data-eid="${f.employee_id}" style="padding:6px 10px;font-size:12px;margin-left:6px;">✅ Ya certificado</button>
+    </td>
+
+    <td>
+      <button class="sec btnDelFila" data-i="${i}" style="padding:6px 10px;font-size:12px;">
+        🗑
+      </button>
+    </td>
+  </tr>
+`;
   });
 
   // ===== Notas =====
@@ -507,7 +522,7 @@ function renderReg(){
     };
   });
 
-  // ===== Botón YA CERTIFICADO =====
+   // ===== Botón YA CERTIFICADO =====
   document.querySelectorAll(".btnYaCert").forEach(b=>{
     b.onclick = () => {
       claroEmployeeIdPendiente = b.dataset.eid;
@@ -515,8 +530,15 @@ function renderReg(){
       claroFechaModal.classList.remove("hidden");
     };
   });
-}
 
+  // ===== Botón QUITAR FILA DEL LOTE =====
+  document.querySelectorAll(".btnDelFila").forEach(b=>{
+    b.onclick = () => {
+      const idx = parseInt(b.dataset.i, 10);
+      removeFila(idx);
+    };
+  });
+}  
 document.getElementById("buscarCedulaBtn").onclick=()=>{
   addFila(cedulaInput.value.trim());
   cedulaInput.value="";
