@@ -560,16 +560,7 @@ if(!u) return alert("Sesión no válida. Inicia sesión de nuevo.");
       }
     }
   }
-// Validar aprobación: todas las requeridas deben ser >= 90
-for(const f of filasRegistro){
-  const req = cargosEvaluacion[f.cargo] || [];
-  for(const r of req){
-    const n = Number(f[r]);
-    if(isNaN(n) || n < MIN_APROBACION){
-      return alert(`❌ NO aprueba: ${f.nombre} (${f.cedula}) tiene ${r.toUpperCase()} = ${f[r]} (mínimo ${MIN_APROBACION}).`);
-    }
-  }
-}
+
 
   const hoy = todayISO();
 const vence = addDaysISO(hoy, VIGENCIA_DIAS);
@@ -615,16 +606,18 @@ if(histErr){
   return;
 }
 
-// 2) Guardar ACTUAL (upsert)
-const { error: upErr } = await sb
-  .from("employee_certifications")
-  .upsert(payload, { onConflict: "employee_id,certificacion" });
+const aprobados = payload.filter(p => p.nota_promedio >= MIN_APROBACION);
 
-if(upErr){
-  alert("❌ Error guardando certificaciones (ACTUAL): " + upErr.message);
-  return;
+if(aprobados.length){
+  const { error: upErr } = await sb
+    .from("employee_certifications")
+    .upsert(aprobados, { onConflict: "employee_id,certificacion" });
+
+  if(upErr){
+    alert("❌ Error guardando certificaciones APROBADAS: " + upErr.message);
+    return;
+  }
 }
-
 
   filasRegistro=[]; renderReg();
   regStatus.textContent="✔ Lote guardado correctamente.";
